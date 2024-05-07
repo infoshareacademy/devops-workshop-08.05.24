@@ -1,1 +1,1 @@
-# devops-workshop-05.08.24
+# devops-workshop-08.05.24
