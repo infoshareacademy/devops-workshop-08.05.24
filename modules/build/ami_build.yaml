@@ -17,7 +17,7 @@ parameters:
     default: "${subnet_id}"
   SecurityGroupId:
     type: String
-    description: Security Group that will be attached to the instance. By Default a security group without any inbound access is attached
+    description: Security Group that will be attached to the instance.
     default: "${security_group}"
   InstanceType:
     type: String
@@ -25,7 +25,7 @@ parameters:
     default: t3.micro
   targetAMIname:
     type: String
-    description: Name for the golden AMI to be created
+    description: Name for the AMI to be created
     default: "${image_name_prefix}"
   ManagedInstanceProfile:
     type: String
@@ -47,13 +47,9 @@ parameters:
     type: String
     description: SSM run command LogGroup name
     default: "${log_group}"
-  terminateInstanceOnFailure:
-    type: Boolean
-    description: (Optional) Terminate the instance when build failed
-    default: true
 
 mainSteps:
-  - name: startInstances
+  - name: startInstance
     action: aws:runInstances
     timeoutSeconds: 3600
     maxAttempts: 1
