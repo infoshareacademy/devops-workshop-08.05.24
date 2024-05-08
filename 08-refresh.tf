@@ -6,6 +6,7 @@ locals {
   region_name = data.aws_region.current.name
 }
 
+#Lambda module to refresh AMI
 module "lambda_function" {
   source  = "terraform-aws-modules/lambda/aws"
   version = "7.4.0"
@@ -56,3 +57,4 @@ resource "aws_cloudwatch_event_target" "trigger_lambda_function" {
 resource "random_id" "hex" {
   byte_length = 8
 }
+
