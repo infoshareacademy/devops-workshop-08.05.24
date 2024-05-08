@@ -1,0 +1,175 @@
+---
+schemaVersion: '0.3'
+description: This automation document triggers Golden AMI creation workflow.
+assumeRole: "{{AutomationAssumeRole}}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: "${automation_role}"
+  LatestImage:
+    type: String
+    description: SSM Parameter for latest Amazon Linux 2 image
+    default: "{{ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}"
+  SubnetId:
+    type: String
+    description: Subnet in which instances will be launched.
+    default: "${subnet_id}"
+  SecurityGroupId:
+    type: String
+    description: Security Group that will be attached to the instance. By Default a security group without any inbound access is attached
+    default: "${security_group}"
+  InstanceType:
+    type: String
+    description: A compatible instance-type for launching an instance
+    default: t3.micro
+  targetAMIname:
+    type: String
+    description: Name for the golden AMI to be created
+    default: "${image_name_prefix}"
+  ManagedInstanceProfile:
+    type: String
+    description: Instance Profile. Do not change the default value.
+    default: "${instance_profile}"
+  SSMInstallationUserData:
+    type: String
+    description: Base64 encoded SSM installation user-data.
+    default: "${instance_userdata}"
+  projectName:
+    type: String
+    description: used for naming and taggong
+    default: "${project_name}"
+  efsId:
+    type: String
+    description: EFS DNS Name
+    default: "${efs_id}"
+  LogGroupName:
+    type: String
+    description: SSM run command LogGroup name
+    default: "${log_group}"
+  terminateInstanceOnFailure:
+    type: Boolean
+    description: (Optional) Terminate the instance when build failed
+    default: true
+
+mainSteps:
+  - name: startInstances
+    action: aws:runInstances
+    timeoutSeconds: 3600
+    maxAttempts: 1
+    onFailure: Abort
+    inputs:
+      ImageId: "{{LatestImage}}"
+      InstanceType: "{{InstanceType}}"
+      MinInstanceCount: 1
+      MaxInstanceCount: 1
+      SubnetId: "{{ SubnetId }}"
+      SecurityGroupIds:
+      - "{{ SecurityGroupId }}"
+      UserData: "{{SSMInstallationUserData}}"
+      IamInstanceProfileName: "{{ ManagedInstanceProfile }}"
+      TagSpecifications:
+      - ResourceType: instance
+        Tags:
+        - Key: Name
+          Value: "ami_build_{{ projectName }}"
+
+  - name: runConfigurationCommands
+    action: aws:runCommand
+    maxAttempts: 1
+    timeoutSeconds: 600
+    onFailure: Abort
+    inputs:
+      DocumentName: AWS-RunShellScript
+      InstanceIds:
+      - "{{startInstances.InstanceIds}}"
+      Parameters:
+        commands:
+        - set -e
+        - wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
+        - rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+        - yum -y upgrade
+        - yum install -y java-17-amazon-corretto-headless.x86_64
+        - yum install -y jenkins
+        - systemctl daemon-reload
+        - yum install -y amazon-efs-utils
+        - mkdir -p /var/lib/jenkins
+        - echo "{{ efsId }}:/ /var/lib/jenkins efs _netdev,noresvport,tls,iam 0 0" >> /etc/fstab
+        - mount -a
+        - chown jenkins:jenkins /var/lib/jenkins
+        - systemctl enable jenkins
+        - systemctl start jenkins
+        - yum install -y amazon-cloudwatch-agent
+        - /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:AmazonCloudWatch-{{ projectName }}
+      CloudWatchOutputConfig:
+        CloudWatchLogGroupName: "{{ LogGroupName }}"
+        CloudWatchOutputEnabled: true
+
+  - name: cleanUp
+    action: aws:runCommand
+    maxAttempts: 1
+    timeoutSeconds: 600
+    onFailure: Abort
+    inputs:
+      DocumentName: AWS-RunShellScript
+      InstanceIds:
+      - "{{startInstances.InstanceIds}}"
+      Parameters:
+        commands:
+        - set -e
+        - yum clean all
+        - rm -rf /var/cache/yum
+        - cat /dev/null > /var/log/messages
+      CloudWatchOutputConfig:
+        CloudWatchLogGroupName: "{{ LogGroupName }}"
+        CloudWatchOutputEnabled: true
+
+  - name: stopInstance
+    action: aws:changeInstanceState
+    timeoutSeconds: 1200
+    maxAttempts: 1
+    onFailure: Abort
+    inputs:
+      InstanceIds:
+      - "{{ startInstances.InstanceIds }}"
+      DesiredState: stopped
+
+  - name: createImage
+    action: aws:createImage
+    timeoutSeconds: 1200
+    maxAttempts: 1
+    onFailure: Abort
+    inputs:
+      InstanceId: "{{ startInstances.InstanceIds }}"
+      ImageName: "{{ targetAMIname }}-{{global:DATE_TIME}}"
+      NoReboot: true
+      ImageDescription: AMI created by EC2 Automation
+
+  - name: tagImage
+    action: aws:createTags
+    timeoutSeconds: 1200
+    maxAttempts: 1
+    onFailure: Abort
+    inputs:
+      ResourceType: EC2
+      ResourceIds:
+      - "{{createImage.ImageId}}"
+      Tags:
+      - Key: Name
+        Value: "{{targetAMIname}}-{{global:DATE_TIME}}"
+      - Key: BuildNumber
+        Value: "{{automation:EXECUTION_ID}}"
+      - Key: DateCreated
+        Value: "{{global:DATE_TIME}}"
+
+  - name: terminateInstance
+    action: aws:changeInstanceState
+    timeoutSeconds: 1200
+    maxAttempts: 1
+    onFailure: Continue
+    inputs:
+      InstanceIds:
+      - "{{ startInstances.InstanceIds }}"
+      DesiredState: terminated
+outputs:
+  - "createImage.ImageId"
