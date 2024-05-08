@@ -4,6 +4,20 @@
 
 ![Jenkins - diagram architektury](jenkins.png)
 
+- [devops-workshop-08.05.24](#devops-workshop-080524)
+  - [Budujemy Serwer Jenkinsa](#budujemy-serwer-jenkinsa)
+  - [CICD - GitHub Actions](#cicd---github-actions)
+  - [Wstepna konfiguracja terraform - `provider.tf`](#wstepna-konfiguracja-terraform---providertf)
+  - [Siec - `01-vpc.tf`](#siec---01-vpctf)
+  - [Uprawnienia - `02-iam.tf`](#uprawnienia---02-iamtf)
+  - [Dysk sieciowy EFS - `03-efs.tf`](#dysk-sieciowy-efs---03-efstf)
+  - [Konfiguracja szablony dla serwera - `04-ec2.tf`](#konfiguracja-szablony-dla-serwera---04-ec2tf)
+  - [Budowanie serwera - `05-build.tf + modules/build`](#budowanie-serwera---05-buildtf--modulesbuild)
+  - [Load Balancer - `06-alb.tf`](#load-balancer---06-albtf)
+  - [AutoScaling Group - `07-asg.tf`](#autoscaling-group---07-asgtf)
+  - [Automatyczne odswieżanie Launch Template - `08-refresh.tf`](#automatyczne-odswieżanie-launch-template---08-refreshtf)
+
+
 ## CICD - GitHub Actions
 
 - Utworzenie bucket'u S3 na pliki stanu terraform - 850480876735-demo-tfstate
@@ -65,7 +79,7 @@ Utworzenie AutoScaling groupy na bazie przygotowanego wczesnie szbalonu uruchami
 
 Serwer bedzie restartowany automatycznie raz w tygodniu z wykorzystaniem najnowszej wersji Launch Template.
 
-## Automatyczne odswierzanie Launch Template - `08-refresh.tf` 
+## Automatyczne odswieżanie Launch Template - `08-refresh.tf`
 
 Utworzene funkcji Lambda w pythonie do automatycznego znajdywania najnowszego obrazu serwera aplikacyjnego i uaktualnianie Launch Template.
 
